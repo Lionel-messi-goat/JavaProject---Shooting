@@ -1,0 +1,156 @@
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.*;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.Random;
+
+public class ShootingGame extends JPanel implements MouseMotionListener, MouseListener, ActionListener {
+    private Timer timer;
+    private ArrayList<Target> targets = new ArrayList<>();  // 생성된 목표물 리스트
+    private int score = 0;  // 점수
+    private int aimX = 400, aimY = 300;  // 에임의 초기 위치
+    private Random rand = new Random();
+
+    public ShootingGame() {
+        this.setPreferredSize(new Dimension(800, 600));
+        this.addMouseListener(this);
+        this.addMouseMotionListener(this);  // 마우스 움직임 리스너 추가
+        timer = new Timer(30, this);  // 30ms마다 애니메이션 갱신
+        timer.start();
+        spawnTarget();  // 처음 목표물 하나 스폰
+
+        // 마우스 커서를 숨기기
+        Toolkit toolkit = Toolkit.getDefaultToolkit();
+        Image invisibleCursorImage = toolkit.createImage(new byte[0]);
+        Cursor invisibleCursor = toolkit.createCustomCursor(invisibleCursorImage, new Point(0, 0), "invisibleCursor");
+        this.setCursor(invisibleCursor);
+    }
+
+    // 목표물(더미) 클래스
+    class Target {
+        int x, y;
+        int size = 50;
+        int lifetime = 100;  // 목표물이 나타나 있는 시간 (ticks)
+
+        Target(int x, int y) {
+            this.x = x;
+            this.y = y;
+        }
+
+        void decreaseLifetime() {
+            lifetime--;
+        }
+    }
+
+    // 목표물을 스폰하는 메서드
+    private void spawnTarget() {
+        int x = rand.nextInt(800 - 50);  // 화면 내 랜덤 위치
+        int y = rand.nextInt(600 - 50);
+        targets.add(new Target(x, y));
+    }
+
+    @Override
+    protected void paintComponent(Graphics g) {
+        super.paintComponent(g);
+
+        // 점수 표시
+        g.setColor(Color.BLACK);
+        g.drawString("Score: " + score, 10, 20);
+
+        // 에임 그리기 (마우스 위치 따라 이동)
+        g.setColor(Color.BLUE);
+        g.drawOval(aimX - 15, aimY - 15, 30, 30);
+        g.drawLine(aimX - 20, aimY, aimX + 20, aimY);
+        g.drawLine(aimX, aimY - 20, aimX, aimY + 20);
+
+        // 목표물 그리기
+        g.setColor(Color.RED);
+        for (Target target : targets) {
+            g.fillOval(target.x, target.y, target.size, target.size);
+        }
+    }
+
+    @Override
+    public void actionPerformed(ActionEvent e) {
+        // 목표물의 수명 감소 및 제거
+        Iterator<Target> targetIterator = targets.iterator();
+        while (targetIterator.hasNext()) {
+            Target target = targetIterator.next();
+            target.decreaseLifetime();
+            if (target.lifetime <= 0) {  // 수명이 다하면 제거
+                targetIterator.remove();
+            }
+        }
+
+        // 일정 확률로 새로운 목표물 스폰
+        if (Math.random() < 0.02) {  // 2% 확률로 스폰
+            spawnTarget();
+        }
+
+        repaint();
+    }
+
+    @Override
+    public void mousePressed(MouseEvent e) {
+        int mouseX = e.getX();
+        int mouseY = e.getY();
+
+        // 클릭한 위치가 목표물에 닿았는지 확인
+        Iterator<Target> targetIterator = targets.iterator();
+        while (targetIterator.hasNext()) {
+            Target target = targetIterator.next();
+            if (mouseX >= target.x && mouseX <= target.x + target.size &&
+                mouseY >= target.y && mouseY <= target.y + target.size) {
+                // 목표물을 맞추면 점수 증가
+                score += 10;
+                targetIterator.remove();
+                break;
+            }
+        }
+    }
+
+    @Override
+    public void mouseMoved(MouseEvent e) {
+        // 마우스 위치를 에임 위치로 설정
+        aimX = e.getX();
+        aimY = e.getY();
+        repaint();  // 에임 위치 갱신
+    }
+
+    // 나머지 인터페이스 메서드들
+    @Override public void mouseReleased(MouseEvent e) {}
+    @Override public void mouseClicked(MouseEvent e) {}
+    @Override public void mouseEntered(MouseEvent e) {}
+    @Override public void mouseExited(MouseEvent e) {}
+    @Override public void mouseDragged(MouseEvent e) {}
+
+    public static void main(String[] args) {
+        // 초기 입장 화면 생성
+        JFrame startFrame = new JFrame("Welcome");
+        startFrame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        startFrame.setSize(400, 200);
+
+        JPanel panel = new JPanel();
+        JLabel label = new JLabel("Welcome to the Shooting Game!");
+        JButton startButton = new JButton("Start Game");
+
+        // 버튼 클릭 이벤트 설정
+        startButton.addActionListener(e -> {
+            // 슈팅 게임 화면으로 전환
+            JFrame gameFrame = new JFrame("Shooting Game");
+            gameFrame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+            gameFrame.add(new ShootingGame());
+            gameFrame.pack();
+            gameFrame.setVisible(true);
+
+            startFrame.dispose();  // 입장 화면 닫기
+        });
+
+        panel.add(label);
+        panel.add(startButton);
+        startFrame.add(panel);
+
+        startFrame.setVisible(true);
+    }
+}
