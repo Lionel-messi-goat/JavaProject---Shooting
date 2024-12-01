@@ -1,0 +1,235 @@
+import javax.swing.*;
+import javax.swing.Timer;
+import java.awt.*;
+import java.awt.event.*;
+import java.io.File;
+import java.util.*;
+
+public class ShootingGameApp {
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(StartScreen::new);
+    }
+}
+
+class StartScreen extends JFrame {
+    public StartScreen() {
+        super("슈팅 게임");
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setSize(800, 600);
+
+        // 새로운 배경 이미지를 사용
+        BackgroundPanel panel = new BackgroundPanel("Background.jpg");
+        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+        panel.setOpaque(false);
+
+        // 타이틀 라벨
+        JLabel titleLabel = new JLabel("치킨 슈팅 게임");
+        titleLabel.setFont(new Font("맑은 고딕", Font.BOLD, 40));
+        titleLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+        titleLabel.setForeground(Color.WHITE);
+
+        // 게임 시작 버튼
+        JButton startButton = createButton("게임 시작");
+        startButton.addActionListener(e -> {
+            String nickname = JOptionPane.showInputDialog(this, "닉네임을 입력하세요:", "닉네임 입력", JOptionPane.PLAIN_MESSAGE);
+            if (nickname != null && !nickname.trim().isEmpty()) {
+                JFrame gameFrame = new JFrame("슈팅 게임");
+                gameFrame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+                gameFrame.add(new ShootingGame(nickname));
+                gameFrame.pack();
+                gameFrame.setVisible(true);
+                dispose();
+            } else {
+                JOptionPane.showMessageDialog(this, "닉네임을 입력해주세요!", "오류", JOptionPane.ERROR_MESSAGE);
+            }
+        });
+
+        // 점수표 버튼
+        JButton scoreButton = createButton("점수표 보기");
+        scoreButton.addActionListener(e -> showScoreboard());
+
+        // 도움말 버튼
+        JButton helpButton = createButton("게임 설명");
+        helpButton.addActionListener(e -> showInstructions());
+
+        // 컴포넌트 추가
+        panel.add(Box.createVerticalGlue());
+        panel.add(titleLabel);
+        panel.add(Box.createRigidArea(new Dimension(0, 30)));
+        panel.add(startButton);
+        panel.add(Box.createRigidArea(new Dimension(0, 15)));
+        panel.add(scoreButton);
+        panel.add(Box.createRigidArea(new Dimension(0, 15)));
+        panel.add(helpButton);
+        panel.add(Box.createVerticalGlue());
+
+        add(panel);
+        setVisible(true);
+    }
+
+    private void showScoreboard() {
+        String scoreboard = ScoreManager.getScoreboard();
+        JOptionPane.showMessageDialog(this, scoreboard.isEmpty() ? "점수 기록이 없습니다." : scoreboard,
+                "점수표", JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    private void showInstructions() {
+        String instructions = """
+                환영합니다! 슈팅 게임에 오신 것을 환영합니다.
+                1. 마우스를 움직여 조준하세요.
+                2. 클릭하여 목표물을 맞추세요.
+                3. 목표물을 맞추면 점수를 획득합니다.
+                닉네임으로 점수가 저장됩니다.
+                즐겁게 플레이하세요!
+                """;
+        JOptionPane.showMessageDialog(this, instructions, "게임 설명", JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    private JButton createButton(String text) {
+        JButton button = new JButton(text);
+        button.setFont(new Font("맑은 고딕", Font.BOLD, 20));
+        button.setAlignmentX(Component.CENTER_ALIGNMENT);
+        button.setFocusPainted(false);
+        return button;
+    }
+}
+
+class BackgroundPanel extends JPanel {
+    private Image backgroundImage;
+
+    public BackgroundPanel(String imagePath) {
+        try {
+            // File 객체를 사용해 로드
+            File imageFile = new File("images/" + imagePath); // images 폴더 기준
+            if (!imageFile.exists()) {
+                throw new IllegalArgumentException("이미지 파일을 찾을 수 없습니다: " + imageFile.getAbsolutePath());
+            }
+            backgroundImage = new ImageIcon(imageFile.getAbsolutePath()).getImage();
+        } catch (Exception e) {
+            System.err.println("이미지 로드 오류: " + e.getMessage());
+        }
+    }
+
+    @Override
+    protected void paintComponent(Graphics g) {
+        super.paintComponent(g);
+        if (backgroundImage != null) {
+            g.drawImage(backgroundImage, 0, 0, getWidth(), getHeight(), this);
+        }
+    }
+}
+
+class ShootingGame extends JPanel {
+    private Timer timer; // javax.swing.Timer 사용
+    private ArrayList<Target> targets = new ArrayList<>();
+    private int score = 0;
+    private int aimX = 400, aimY = 300;
+    private Random rand = new Random();
+    private String nickname;
+
+    public ShootingGame(String nickname) {
+        this.nickname = nickname;
+        this.setPreferredSize(new Dimension(800, 600));
+        this.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) {
+                checkHit(e.getX(), e.getY());
+            }
+        });
+        this.addMouseMotionListener(new MouseMotionAdapter() {
+            @Override
+            public void mouseMoved(MouseEvent e) {
+                aimX = e.getX();
+                aimY = e.getY();
+                repaint();
+            }
+        });
+
+        // javax.swing.Timer 사용
+        timer = new Timer(30, e -> gameLoop());
+        timer.start();
+        spawnTarget();
+
+        // 마우스 커서 숨기기
+        Toolkit toolkit = Toolkit.getDefaultToolkit();
+        Image invisibleCursorImage = toolkit.createImage(new byte[0]);
+        Cursor invisibleCursor = toolkit.createCustomCursor(invisibleCursorImage, new Point(0, 0), "invisibleCursor");
+        this.setCursor(invisibleCursor);
+    }
+
+    private void spawnTarget() {
+        int x = rand.nextInt(750);
+        int y = rand.nextInt(550);
+        targets.add(new Target(x, y));
+    }
+
+    private void gameLoop() {
+        targets.removeIf(target -> target.lifetime-- <= 0);
+
+        if (Math.random() < 0.02) {
+            spawnTarget();
+        }
+
+        repaint();
+    }
+
+    private void checkHit(int x, int y) {
+        Iterator<Target> it = targets.iterator();
+        while (it.hasNext()) {
+            Target target = it.next();
+            if (x >= target.x && x <= target.x + target.size && y >= target.y && y <= target.y + target.size) {
+                score += 10;
+                it.remove();
+                break;
+            }
+        }
+    }
+
+    @Override
+    protected void paintComponent(Graphics g) {
+        super.paintComponent(g);
+        g.setColor(Color.BLACK);
+        g.drawString("Score: " + score, 10, 20);
+
+        g.setColor(Color.BLUE);
+        g.drawOval(aimX - 15, aimY - 15, 30, 30);
+        g.drawLine(aimX - 20, aimY, aimX + 20, aimY);
+        g.drawLine(aimX, aimY - 20, aimX, aimY + 20);
+
+        g.setColor(Color.RED);
+        for (Target target : targets) {
+            g.fillOval(target.x, target.y, target.size, target.size);
+        }
+    }
+
+    @Override
+    public void setVisible(boolean aFlag) {
+        super.setVisible(aFlag);
+        if (!aFlag) {
+            ScoreManager.addScore(nickname, score);
+        }
+    }
+
+    private static class Target {
+        int x, y, size = 50, lifetime = 100;
+
+        Target(int x, int y) {
+            this.x = x;
+            this.y = y;
+        }
+    }
+}
+
+class ScoreManager {
+    private static final Map<String, Integer> scores = new LinkedHashMap<>();
+
+    public static void addScore(String nickname, int score) {
+        scores.put(nickname, Math.max(scores.getOrDefault(nickname, 0), score));
+    }
+
+    public static String getScoreboard() {
+        StringBuilder sb = new StringBuilder();
+        scores.forEach((nickname, score) -> sb.append(nickname).append(": ").append(score).append(" 점\n"));
+        return sb.toString();
+    }
+}
